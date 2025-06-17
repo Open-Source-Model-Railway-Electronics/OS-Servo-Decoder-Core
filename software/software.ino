@@ -376,7 +376,7 @@ void notifyDccAccTurnoutOutput( uint16 address, uint8 direction, uint8 output )
 
         settings.myAddress = address ;
         EEPROM.put( EE_SETTINGS, settings ) ;
-        blinkLed(6);
+        blinkLed( 6 ) ;
         return ;
     }
 
@@ -390,8 +390,21 @@ void notifyDccAccTurnoutOutput( uint16 address, uint8 direction, uint8 output )
 
     if( direction >= 1 ) direction = 1 ;
 
+    servo[index].manualRelease() ;
     servo[index].setState( direction ) ;
     blinkLed(3);
+}
+
+// DCC extended directly controls a servo motor
+void notifyDccSigOutputState( uint16_t address, uint8_t state )
+{
+    if( address  < settings.myAddress 
+    ||  address >= settings.myAddress + 8 ) return ;
+    
+    uint8 index = address - myAddress ;
+
+    uint8 setpoint = map( state, 0, 255, 20,  160 ) ;
+    servo[index].manualOverride( setpoint ) ;
 }
 
 // CONFIG MODE BY DCC THROTTLE
