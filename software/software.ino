@@ -1,4 +1,5 @@
-#include "src/io.h"
+#include "config.h"
+
 #include "src/macros.h"
 #include <EEPROM.h>
 #include "src/debounceClass2.h"
@@ -9,6 +10,10 @@
 /* TODO  
  // need backward compatability to mk1 version 1
  // improve all of EEPROM
+    the serv objects uses 4 bytes each and start at 0x0000. The max is 12 servos so 48 bytes starting from zero are used
+    deadbeef used 1020-1023
+    settings uses a few bytes after 900. SHould be ok
+
  // implement all servo decoder version IO, also include mardec,
  // implement Speed changes using F8 and throttle
  // change the constructor so now variables are needed no more.
@@ -20,7 +25,7 @@
 
 enum
 {
-    initialize,
+    idle, // check all conditions? 
     speed_zero,
     configureServo,
 } ;
@@ -30,7 +35,7 @@ uint8           servoSpeed ;
 const uint16    servoAddress = 0x50 ;
 uint16          myAddress ;
 uint8           waiting4address ;
-uint8           state = initialize ;
+uint8           state = idle ;
 NmraDcc         dcc ;
 
 uint8           dccIndex = 0xFF ;
@@ -46,12 +51,12 @@ C_TRIG          F6 ;
 C_TRIG          F7 ;
 R_TRIG          F8 ;
 
-const int DEADBEEF_EE_ADDRESS    = 1020 ; // 1020, 1021, 1022, 1023
-const int EE_SETTINGS            =  900 ;
+const int       DEADBEEF_EE_ADDRESS    = 1020 ; // 1020, 1021, 1022, 1023
+const int       EE_SETTINGS            =  900 ;
 
-const int LOCO_FUNCTIONS_OFF = 0 ;
-const int FANTASTIC_FOUR     = 1 ;
-const int EIGHT_BALL         = 2 ;
+const int       LOCO_FUNCTIONS_OFF = 0 ;
+const int       FANTASTIC_FOUR     = 1 ;
+const int       EIGHT_BALL         = 2 ;
 
 typedef struct
 {
@@ -80,19 +85,8 @@ const int defaultMax   = 100 ;
 const int defaultSpeed =  40 ;
 
 // DECODER UNIQUE SERVO SETTINGS
-const int nServos    = 6 ;
-const int nSwitches  = 4 ;
-
 ServoSweep  servo[nServos] = {};
 Debouncer   switches[nSwitches] = {} ;
-
-enum     // TODO need backward compatability to mk1 version 1
-{
-    SEL,
-    TOGGLE,
-    UP,
-    DOWN,
-} ;
 
 uint8     blinkCounter ;
 uint8     blinkMax ;
@@ -125,7 +119,9 @@ void statusLed()
     END_REPEAT
 }
 
-void processSwitches()
+
+#if defined SWITCH_LAYOUT_4BTN
+void process4ButtonLayout()
 {
     uint8 stateDown = switches[DOWN].state ;
     uint8 stateUp   = switches[ UP ].state ;
@@ -176,7 +172,7 @@ void processSwitches()
     }
 
 // ************ SELECT, SHORT = SELECT MOTOR, LONG = GET NEW ADDRESS (OR ABORT)
-    time = switches[SEL].pressTime( 2000, 0 ) ;
+    time = switches[SELECT].pressTime( 2000, 0 ) ;
 
     if( time == SHORT)
     {
@@ -191,6 +187,84 @@ void processSwitches()
         waiting4address ^= 1 ;
         blinkLed(6) ;
     }
+}
+
+#elif defined SWITCH_LAYOUT_5BTN
+void process5ButtonLayout()
+{
+    uint8 stateDown = switches[DOWN].state ;
+    uint8 stateUp   = switches[ UP  ].state ;
+
+    // ************ FINE TUNING SERVO POSITION ****************
+    REPEAT_MS( 200 )
+    {
+        if( switches[DOWN].state == LOW && switches[UP].state == LOW )
+        {
+            // eventueel override-mode, indien gewenst
+        }
+        else if( switches[DOWN].state == LOW )
+        {
+            waiting4address = 0 ;
+            servo[index].decrement() ;
+            servo[index].manualRelease() ;
+            blinkLed(3) ;
+        }
+        else if( switches[UP].state == LOW )
+        {
+            waiting4address = 0 ;
+            servo[index].increment() ;
+            servo[index].manualRelease() ;
+            blinkLed(2) ;
+        }
+    }
+    END_REPEAT
+
+    if( stateDown == RISING || stateUp == RISING )
+    {
+        servo[index].commitSettings() ;
+    }
+
+    // ************ LEFT BUTTON = previous servo + toggle ************
+    if( switches[LEFT].pressTime( 0, 0 ) == SHORT )
+    {
+        if( --index == 255 ) index = nServos - 1 ;
+        servo[index].setState( !servo[index].getState() ) ;
+        blinkLed(1) ;
+    }
+
+    // ************ RIGHT BUTTON = next servo + toggle ************
+    if( switches[RIGHT].pressTime( 0, 0 ) == SHORT )
+    {
+        if( ++index == nServos ) index = 0 ;
+        servo[index].setState( !servo[index].getState() ) ;
+        blinkLed(4) ;
+    }
+
+    // ************ SELECT: SHORT = toggle, LONG = getAddress mode ****
+    uint8 time = switches[SEL].pressTime( 1500, 0 ) ;
+
+    if( time == SHORT )
+    {
+        waiting4address = 0 ;
+        servo[index].setState( !servo[index].getState() ) ;
+        blinkLed(5) ;
+    }
+    else if( time == LONG )
+    {
+        waiting4address = 1 ;
+        blinkLed(6) ;
+    }
+}
+#endif
+
+void processSwitches()
+{
+#if defined SWITCH_LAYOUT_5BTN
+    process5ButtonLayout();
+
+#elif defined SWITCH_LAYOUT_4BTN
+    process4ButtonLayout();
+#endif
 }
 
 
@@ -210,15 +284,23 @@ bool deadbeef()
 
 void setup()
 {
-    initIO();
-
     dcc.pin(2, 0);
     dcc.init(MAN_ID_DIY, 11, FLAGS_OUTPUT_ADDRESS_MODE | FLAGS_DCC_ACCESSORY_DECODER, 0);
 
-    switches[SEL].setPin(switchPin0);
-    switches[TOGGLE].setPin(switchPin1);
-    switches[UP].setPin(switchPin2);
-    switches[DOWN].setPin(switchPin3);
+
+#if defined SWITCH_LAYOUT_4BTN
+    switches[SELECT].setPin(switchPins[0]);
+    switches[TOGGLE].setPin(switchPins[1]);
+    switches[    UP].setPin(switchPins[2]);
+    switches[  DOWN].setPin(switchPins[3]);
+
+#elif defined SWITCH_LAYOUT_5BTN
+    switches[   SEL].setPin(switchPins[0]);
+    switches[TOGGLE].setPin(switchPins[1]);
+    switches[    UP].setPin(switchPins[2]);
+    switches[  DOWN].setPin(switchPins[3]);
+    switches[  LEFT].setPin(switchPins[4]);
+#endif
 
     if( deadbeef() )
     {
@@ -234,9 +316,8 @@ void setup()
             servoPins[i],
             defaultMin,
             defaultMax,
-            defaultSpeed,              // speed in ms per degree
-            relayPins[i],
-            1                // turnOff
+            defaultSpeed,
+            relayPins[i]
         );
     }
     blinkLed(5);
@@ -400,20 +481,26 @@ void dccConfiguration()
 {
     if( dccIndex == 0xFF )
     {
-        state = initialize ;
+        state = idle ;
         return ;
     }
 
     switch( state )
     {
-    case initialize:
-        if( F0.Q )                state = speed_zero ;
+    case idle:
+        if( F0.Q    // if F0 turned ON, speed = 0 and all other functions are OFF
+        &&  !F1.EN 
+        &&  !F2.EN 
+        &&  !F3.EN 
+        &&  !F4.EN 
+        &&  !F5.EN 
+        &&  !F6.EN 
+        &&  !F7.EN 
+        &&  !F8.EN 
+        && servoSetpoint == 90 ) state = configureServo ;
         break ;
 
-    case speed_zero:
-        if( !F0.EN )              state = initialize ;   // F0 turned off again
-        if( servoSetpoint == 90 ) state = configureServo ;
-        break ;
+
         
     case configureServo:
         // NOTE BRAIN FART, IF F8 is active, you may use the active speed to keep toggling the motor while the throttle can be used for speed.
@@ -447,9 +534,10 @@ void dccConfiguration()
         if( !F0.EN )
         {
             servo[dccIndex].manualRelease() ;
+            servo[dccIndex].commitSettings() ;
             EEPROM.put( EE_SETTINGS, settings ) ;
 
-            state = initialize ;
+            state = idle ;
         }
         
         break ;

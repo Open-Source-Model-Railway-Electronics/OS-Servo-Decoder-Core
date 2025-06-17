@@ -29,7 +29,7 @@ public:
     uint8_t sweep( ) ;
     void setState( uint8_t _state ) ;
     uint8_t getState() ;
-    void begin( ) ;
+    void begin(  uint8_t, uint8_t, uint8_t, uint8_t, uint8_t ) ;
     void setMin( uint8_t _min) ;
     void setMax( uint8_t _max) ;
     void increment( ) ;

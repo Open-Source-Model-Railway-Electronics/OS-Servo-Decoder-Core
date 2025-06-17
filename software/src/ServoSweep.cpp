@@ -76,8 +76,10 @@ ServoSweep::ServoSweep()                    // constructor 1
     // else           turnOff = 0 ;
 // }
 
-void ServoSweep::begin( uint8_t _servoPin, uint8_t _min, uint8_t _max, uint8_t _speed, uint8_t _relayPin, uint8_t _turnOff )
+void ServoSweep::begin( uint8_t _servoPin, uint8_t _min, uint8_t _max, uint8_t _speed, uint8_t _relayPin )
 {
+    turnOff = 1 ;
+
     if( eeAddress != 0xFFFF ) // If EEPROM present
     {
         uint8_t flags = EEPROM.read(eeAddress+2) ;
@@ -136,8 +138,7 @@ void ServoSweep::setState( uint8_t _state )
 
 void ServoSweep::setSpeed( uint8_t _speed )
 {
-    servoSpeed = _speed; 
-    EEPROM.update( eeAddress+2, servoSpeed ) ;
+    servoSpeed = _speed ;
 }
 
 uint8_t ServoSweep::getState()
@@ -290,5 +291,5 @@ void ServoSweep::useEEPROM( )                   // use this one for all the othe
 void ServoSweep::reset()                        
 {
     EEPROM.write( eeAddress+2, DEFAULT_BITS ) ; // flag begin method to load defaults
-    begin() ;                                   // call begin again to load the defaults
+    //begin() ;                                   // call begin again to load the defaults
 }
