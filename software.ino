@@ -1,3 +1,4 @@
+// BAS WAS HERE (test for submodule)
 #include "config.h"
 
 #include "src/macros.h"
