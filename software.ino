@@ -8,17 +8,10 @@
 #include "src/ST.h"
 
 /* TODO  
- // need backward compatability to mk1 version 1
- // improve all of EEPROM
-    the serv objects uses 4 bytes each and start at 0x0000. The max is 12 servos so 48 bytes starting from zero are used
-    deadbeef used 1020-1023
-    settings uses a few bytes after 900. SHould be ok
-
- // implement all servo decoder version IO, also include mardec,
- // implement Speed changes using F8 and throttle
- // change the constructor so now variables are needed no more.
- // Also change the servoSweepClass so the speed is also committed
-
+    the speed configuring needs to be tested
+    the buttons need to be tested
+    DCC ext need to be tested
+    speed step curve may be nice, atleast for the 6 fold variant.
 
 
 */
@@ -413,7 +406,7 @@ void notifyDccSpeed( uint16 Addr, DCC_ADDR_TYPE AddrType, uint8 Speed, DCC_DIREC
     if( Addr != 9999 ) return ;
     // is speed is negative (dir = 1?, whatever ) speed of 1-128 must be MAP'ed to 20-90 degrees
     // is speed is  postive (dir = 0?, whatever ) speed of 1-128 must be MAP'ed to 90-160 degrees
-    servoSpeed = Speed ;
+    servoSpeed =  map( Speed, 1, 128, 200, 20 ) ;
     if( Dir == 1 ) servoSetpoint = map( Speed, 1, 128, 90,  20 ) ;
     else           servoSetpoint = map( Speed, 1, 128, 90, 160 ) ;
 }
